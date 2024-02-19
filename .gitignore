@@ -1,0 +1,11 @@
+# executables
+*.exe
+
+# pprof files
+*.out
+
+# txt files
+*.txt
+
+# GoLand dir
+.idea/
