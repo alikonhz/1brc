@@ -6,13 +6,8 @@ import (
 	"io"
 	"os"
 	"sort"
-	"strconv"
 	"time"
 )
-
-type temp struct {
-	Sign byte
-}
 
 type Measurement struct {
 	Name string
@@ -22,6 +17,15 @@ type Measurement struct {
 	sum   float32
 	count int
 }
+
+const (
+	dec1 float32 = 0.1
+	one  float32 = 1.0
+	ten  float32 = 10.0
+
+	// code of zero in ASCII table
+	zeroCode = 48
+)
 
 func main() {
 	if len(os.Args) < 2 {
@@ -63,6 +67,29 @@ func main() {
 	fmt.Printf("processed in %d ms", d.Milliseconds())
 }
 
+func parseFloat(input []byte) (float32, error) {
+	s := input
+	var f float32 = 0.0
+	minus := false
+	if s[0] == '-' {
+		minus = true
+		s = s[1:]
+	}
+	f += dec1 * float32(s[len(s)-1]-zeroCode)
+	// minus last symbol and dot
+	s = s[:len(s)-2]
+	f += one * float32(s[len(s)-1]-zeroCode)
+	s = s[:len(s)-1]
+	if len(s) > 0 {
+		f += ten * float32(s[0]-zeroCode)
+	}
+	if minus {
+		return -f, nil
+	}
+
+	return f, nil
+}
+
 func measure(f *os.File) ([]*Measurement, error) {
 
 	buffer := make([]byte, 1024*1024*1024) // 1GB
@@ -91,9 +118,7 @@ func measure(f *os.File) ([]*Measurement, error) {
 
 	addCity := func() error {
 		city := string(cityBuffer[0:cityIndex])
-		temp := string(tempBuffer[0:tempIndex])
-
-		val, err := strconv.ParseFloat(temp, 32)
+		val, err := parseFloat(tempBuffer[0:tempIndex])
 		if err != nil {
 			return err
 		}
