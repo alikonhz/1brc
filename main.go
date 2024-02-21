@@ -12,19 +12,15 @@ import (
 
 type Measurement struct {
 	Name string
-	Min  float32
-	Max  float32
+	Min  int16
+	Max  int16
 
 	Hash  uint64
-	sum   float32
+	sum   int32
 	count int
 }
 
 const (
-	dec1 float32 = 0.1
-	one  float32 = 1.0
-	ten  float32 = 10.0
-
 	// code of zero in ASCII table
 	zeroCode = 48
 )
@@ -58,7 +54,8 @@ func main() {
 	fmt.Fprint(resF, "{")
 	comma := ""
 	for i := 0; i < len(res); i++ {
-		fmt.Fprintf(resF, "%s%s=%.1f/%.1f/%.1f", comma, res[i].Name, res[i].Min, res[i].sum/float32(res[i].count), res[i].Max)
+		avg := float32(res[i].sum) / float32(res[i].count)
+		fmt.Fprintf(resF, "%s%s=%.1f/%.1f/%.1f", comma, res[i].Name, float32(res[i].Min)/10.0, float32(avg)/10.0, float32(res[i].Max)/10.0)
 		comma = ", "
 	}
 
@@ -69,21 +66,21 @@ func main() {
 	fmt.Printf("processed in %d ms", d.Milliseconds())
 }
 
-func parseFloat(input []byte) (float32, error) {
+func parseFloat(input []byte) (int16, error) {
 	s := input
-	var f float32 = 0.0
+	var f int16 = 0
 	minus := false
 	if s[0] == '-' {
 		minus = true
 		s = s[1:]
 	}
-	f += dec1 * float32(s[len(s)-1]-zeroCode)
+	f += int16(s[len(s)-1] - zeroCode)
 	// minus last symbol and dot
 	s = s[:len(s)-2]
-	f += one * float32(s[len(s)-1]-zeroCode)
+	f += 10 * int16(s[len(s)-1]-zeroCode)
 	s = s[:len(s)-1]
 	if len(s) > 0 {
-		f += ten * float32(s[0]-zeroCode)
+		f += 100 * int16(s[0]-zeroCode)
 	}
 	if minus {
 		return -f, nil
@@ -229,8 +226,8 @@ func measure(f *os.File) ([]*Measurement, error) {
 	return result, nil
 }
 
-func (m *Measurement) add(val float32) {
-	m.sum += val
+func (m *Measurement) add(val int16) {
+	m.sum += int32(val)
 	m.count++
 	if val < m.Min {
 		m.Min = val
