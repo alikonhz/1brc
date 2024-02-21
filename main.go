@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"hash/crc64"
 	"io"
 	"os"
 	"sort"
@@ -14,6 +15,7 @@ type Measurement struct {
 	Min  float32
 	Max  float32
 
+	Hash  uint64
 	sum   float32
 	count int
 }
@@ -94,8 +96,8 @@ func measure(f *os.File) ([]*Measurement, error) {
 
 	buffer := make([]byte, 1024*1024*1024) // 1GB
 
-	var keys []string
-	m := make(map[string]*Measurement)
+	var result []*Measurement
+	allCities := make([][]*Measurement, 65535)
 
 	// will become true when we reach EOF
 	end := false
@@ -116,26 +118,66 @@ func measure(f *os.File) ([]*Measurement, error) {
 		sc = ';'
 	)
 
+	crc := crc64.New(crc64.MakeTable(crc64.ECMA))
+
 	addCity := func() error {
-		city := string(cityBuffer[0:cityIndex])
+		city := cityBuffer[0:cityIndex]
+		_, err := crc.Write(city)
+		if err != nil {
+			return err
+		}
 		val, err := parseFloat(tempBuffer[0:tempIndex])
 		if err != nil {
 			return err
 		}
 
-		mr, ok := m[city]
-		if !ok {
-			m[city] = &Measurement{
-				Name:  city,
-				count: 0,
+		crcVal := crc.Sum64()
+		cityHash := crcVal % 65535
+		crc.Reset()
+
+		mr := allCities[cityHash]
+		var cityMr *Measurement
+		if len(mr) == 0 {
+			mr = make([]*Measurement, 5)
+			cityMr = &Measurement{
+				Name:  string(city),
+				Min:   99,
+				Max:   -99,
+				Hash:  crcVal,
 				sum:   0,
-				Min:   100,
-				Max:   -100,
+				count: 0,
 			}
-			keys = append(keys, city)
+			result = append(result, cityMr)
+			mr[0] = cityMr
+			allCities[cityHash] = mr
 		} else {
-			mr.add(float32(val))
+			for i := 0; i < len(mr); i++ {
+				cityMr = mr[i]
+				if cityMr != nil && cityMr.Hash == crcVal {
+					break
+				}
+
+				if cityMr == nil {
+					cityMr = &Measurement{
+						Name:  string(city),
+						Min:   99,
+						Max:   -99,
+						Hash:  crcVal,
+						sum:   0,
+						count: 0,
+					}
+					result = append(result, cityMr)
+					mr[i] = cityMr
+					break
+				}
+			}
 		}
+
+		if cityMr == nil {
+			panic(fmt.Errorf("%+v", mr))
+		}
+
+		cityMr.add(val)
 
 		return nil
 	}
@@ -180,14 +222,11 @@ func measure(f *os.File) ([]*Measurement, error) {
 		}
 	}
 
-	sort.Strings(keys)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
 
-	res := make([]*Measurement, len(keys), len(keys))
-	for i := 0; i < len(keys); i++ {
-		res[i] = m[keys[i]]
-	}
-
-	return res, nil
+	return result, nil
 }
 
 func (m *Measurement) add(val float32) {
