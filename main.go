@@ -204,9 +204,6 @@ func measure(f *os.File) ([]*Measurement, error) {
 			case cr:
 			case lf:
 				tempEnd = i
-				if tempEnd == 67 && tempStart > tempEnd {
-					fmt.Printf("")
-				}
 				err = addCity()
 				if err != nil {
 					return nil, err
