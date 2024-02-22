@@ -91,7 +91,8 @@ func parseFloat(input []byte) (int16, error) {
 
 func measure(f *os.File) ([]*Measurement, error) {
 
-	buffer := make([]byte, 1024*1024*1024) // 1GB
+	const prefixBufLen = 64
+	buffer := make([]byte, (1024*1024*1024)+prefixBufLen) // 1GB + 64 bytes
 
 	var result []*Measurement
 	allCities := make([][]*Measurement, 65535)
@@ -99,31 +100,28 @@ func measure(f *os.File) ([]*Measurement, error) {
 	// will become true when we reach EOF
 	end := false
 
-	// we will copy data from the main buffer here
-	cityBuffer := make([]byte, 128) // city buffer - we don't expect cities with more than 128 bytes
-	tempBuffer := make([]byte, 8)   // temperature buffer
-
 	var (
-		cityIndex int
-		tempIndex int
-		isCity    bool = true
+		cityStart int
+		cityEnd   int
+		tempStart int
+		tempEnd   int
 	)
 
 	const (
-		cr = '\r'
-		lf = '\n'
-		sc = ';'
+		cr        = '\r'
+		lf        = '\n'
+		semicolon = ';'
 	)
 
 	crc := crc32.New(crc32.MakeTable(crc32.Koopman))
 
 	addCity := func() error {
-		city := cityBuffer[0:cityIndex]
+		city := buffer[cityStart:cityEnd]
 		_, err := crc.Write(city)
 		if err != nil {
 			return err
 		}
-		val, err := parseFloat(tempBuffer[0:tempIndex])
+		val, err := parseFloat(buffer[tempStart:tempEnd])
 		if err != nil {
 			return err
 		}
@@ -179,8 +177,9 @@ func measure(f *os.File) ([]*Measurement, error) {
 		return nil
 	}
 
+	prefixIndex := prefixBufLen
 	for !end {
-		read, err := f.Read(buffer)
+		read, err := f.Read(buffer[prefixBufLen:])
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				end = true
@@ -189,33 +188,49 @@ func measure(f *os.File) ([]*Measurement, error) {
 			}
 		}
 
-		for i := 0; i < read; i++ {
+		lfIndex := prefixBufLen + read - 1
+		if !end {
+			for buffer[lfIndex] != lf {
+				lfIndex--
+			}
+		}
+
+		// we always start from city
+		cityStart = prefixIndex
+
+		for i := prefixIndex; i < lfIndex; i++ {
 			// check every byte
 			switch buffer[i] {
 			case cr:
 			case lf:
-				if cityIndex > 0 && tempIndex > 0 {
-					err := addCity()
-					if err != nil {
-						return nil, err
-					}
-
-					cityIndex = 0
-					tempIndex = 0
-					isCity = true
+				tempEnd = i
+				if tempEnd == 67 && tempStart > tempEnd {
+					fmt.Printf("")
 				}
-			case sc: // semicolon
-				isCity = false
-				tempIndex = 0
-			default:
-				if isCity {
-					cityBuffer[cityIndex] = buffer[i]
-					cityIndex++
-				} else {
-					tempBuffer[tempIndex] = buffer[i]
-					tempIndex++
+				err = addCity()
+				if err != nil {
+					return nil, err
 				}
+				cityStart = i + 1
+			case semicolon:
+				cityEnd = i
+				tempStart = i + 1
 			}
+		}
+
+		tempEnd = lfIndex
+		if cityStart < lfIndex {
+			// we have last unprocessed city
+			err = addCity()
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		prefixIndex = prefixBufLen
+		for i := prefixBufLen + read - 1; i > lfIndex; i-- {
+			prefixIndex--
+			buffer[prefixIndex] = buffer[i]
 		}
 	}
 
