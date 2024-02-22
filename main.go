@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
-	"hash/crc64"
+	"hash/crc32"
 	"io"
 	"os"
 	"sort"
@@ -15,7 +15,7 @@ type Measurement struct {
 	Min  int16
 	Max  int16
 
-	Hash  uint64
+	Hash  uint32
 	sum   int32
 	count int
 }
@@ -115,7 +115,7 @@ func measure(f *os.File) ([]*Measurement, error) {
 		sc = ';'
 	)
 
-	crc := crc64.New(crc64.MakeTable(crc64.ECMA))
+	crc := crc32.New(crc32.MakeTable(crc32.Koopman))
 
 	addCity := func() error {
 		city := cityBuffer[0:cityIndex]
@@ -128,7 +128,7 @@ func measure(f *os.File) ([]*Measurement, error) {
 			return err
 		}
 
-		crcVal := crc.Sum64()
+		crcVal := crc.Sum32()
 		cityHash := crcVal % 65535
 		crc.Reset()
 
