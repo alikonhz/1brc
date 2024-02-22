@@ -29,7 +29,8 @@ func BenchmarkMeasure(b *testing.B) {
 	fmt.Fprint(resF, "{")
 	comma := ""
 	for i := 0; i < len(res); i++ {
-		fmt.Fprintf(resF, "%s%s=%.1f/%.1f/%.1f", comma, res[i].Name, res[i].Min, res[i].sum/float32(res[i].count), res[i].Max)
+		avg := float32(res[i].sum) / float32(res[i].count)
+		fmt.Fprintf(resF, "%s%s=%.1f/%.1f/%.1f", comma, res[i].Name, float32(res[i].Min)/10.0, float32(avg)/10.0, float32(res[i].Max)/10.0)
 		comma = ", "
 	}
 
