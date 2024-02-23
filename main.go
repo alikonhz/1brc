@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
-	"hash/crc32"
+	"github.com/cespare/xxhash/v2"
 	"io"
 	"os"
 	"sort"
@@ -15,7 +15,7 @@ type Measurement struct {
 	Min  int16
 	Max  int16
 
-	Hash  uint32
+	Hash  uint64
 	sum   int32
 	count int
 }
@@ -113,7 +113,7 @@ func measure(f *os.File) ([]*Measurement, error) {
 		semicolon = ';'
 	)
 
-	crc := crc32.New(crc32.MakeTable(crc32.Koopman))
+	crc := xxhash.New()
 
 	addCity := func() error {
 		city := buffer[cityStart:cityEnd]
@@ -126,7 +126,7 @@ func measure(f *os.File) ([]*Measurement, error) {
 			return err
 		}
 
-		crcVal := crc.Sum32()
+		crcVal := crc.Sum64()
 		cityHash := crcVal % 65535
 		crc.Reset()
 
