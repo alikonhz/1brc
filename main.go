@@ -48,15 +48,15 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Fprint(resF, "{")
+	fmt.Fprint(resF, "{\n")
 	comma := ""
 	for i := 0; i < len(res); i++ {
 		avg := float32(res[i].sum) / float32(res[i].count)
-		fmt.Fprintf(resF, "%s%s=%.1f/%.1f/%.1f", comma, res[i].Name, float32(res[i].Min)/10.0, float32(avg)/10.0, float32(res[i].Max)/10.0)
-		comma = ", "
+		fmt.Fprintf(resF, "%s%s=%.1f/%.1f/%.1f\n", comma, res[i].Name, float32(res[i].Min)/10.0, float32(avg)/10.0, float32(res[i].Max)/10.0)
+		//comma = ", "
 	}
 
-	fmt.Fprint(resF, "}")
+	fmt.Fprint(resF, "}\n")
 
 	end := time.Now()
 	d := end.Sub(start)
@@ -385,9 +385,6 @@ func (m *Measurement) add(val int16) {
 func (m *Measurement) merge(other *Measurement) {
 	m.sum += other.sum
 	m.count += other.count
-	if other.Min < m.Min {
-		m.Min = other.Min
-	} else if other.Max > m.Max {
-		m.Max = other.Max
-	}
+	m.Min = min(m.Min, other.Min)
+	m.Max = max(m.Max, other.Max)
 }
