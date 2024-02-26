@@ -19,7 +19,7 @@ const (
 	CR               = '\r'
 	LF               = '\n'
 	semicolon        = ';'
-	mSize     uint64 = 32768
+	mSize     uint64 = 30557 // prime number
 )
 
 func main() {
@@ -87,10 +87,9 @@ func parseFloat(input []byte) (int16, error) {
 }
 
 type worker struct {
-	allCities     [][]*Measurement
-	indexes       []uint64
-	uniqueResults int
-	crc           hash.Hash64
+	allCities [][]*Measurement
+	indexes   []uint64
+	crc       hash.Hash64
 }
 
 func newWorker() *worker {
@@ -157,7 +156,7 @@ func (w *worker) addCity(buffer []byte, cityStart, cityEnd, tempStart, tempEnd i
 	mr := w.allCities[cityIndex]
 	var cityMr *Measurement
 	if len(mr) == 0 {
-		mr = make([]*Measurement, 5)
+		mr = make([]*Measurement, 2)
 		cityMr = &Measurement{
 			Name:  string(city),
 			Min:   99,
@@ -167,16 +166,13 @@ func (w *worker) addCity(buffer []byte, cityStart, cityEnd, tempStart, tempEnd i
 			count: 0,
 		}
 		w.indexes = append(w.indexes, cityIndex)
-		w.uniqueResults++
 		mr[0] = cityMr
 		w.allCities[cityIndex] = mr
 	} else {
-		for i := 0; i < len(mr); i++ {
-			cityMr = mr[i]
-			if cityMr != nil && cityMr.Hash == crcVal {
-				break
-			}
-
+		if mr[0].Hash == crcVal {
+			cityMr = mr[0]
+		} else {
+			cityMr = mr[1]
 			if cityMr == nil {
 				cityMr = &Measurement{
 					Name:  string(city),
@@ -187,9 +183,7 @@ func (w *worker) addCity(buffer []byte, cityStart, cityEnd, tempStart, tempEnd i
 					count: 0,
 				}
 
-				w.uniqueResults++
-				mr[i] = cityMr
-				break
+				mr[1] = cityMr
 			}
 		}
 	}
