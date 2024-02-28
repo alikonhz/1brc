@@ -3,8 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/cespare/xxhash/v2"
-	"hash"
 	"io"
 	"os"
 	"runtime"
@@ -15,11 +13,13 @@ import (
 
 const (
 	// code of zero in ASCII table
-	zeroCode         = 48
-	CR               = '\r'
-	LF               = '\n'
-	semicolon        = ';'
-	mSize     uint64 = 30557 // prime number
+	zeroCode              = 48
+	CR                    = '\r'
+	LF                    = '\n'
+	semicolon             = ';'
+	mSize          uint64 = 32768
+	fnvOffsetBasis uint64 = 0xcbf29ce484222325
+	fnvPrime       uint64 = 0x100000001b3
 )
 
 func main() {
@@ -54,6 +54,7 @@ func main() {
 		avg := float32(res[i].sum) / float32(res[i].count)
 		fmt.Fprintf(resF, "%s%s=%.1f/%.1f/%.1f\n", comma, res[i].Name, float32(res[i].Min)/10.0, float32(avg)/10.0, float32(res[i].Max)/10.0)
 		//comma = ", "
+		comma = " "
 	}
 
 	fmt.Fprint(resF, "}\n")
@@ -63,7 +64,7 @@ func main() {
 	fmt.Printf("processed in %d ms", d.Milliseconds())
 }
 
-func parseFloat(input []byte) (int16, error) {
+func parseFloat(input []byte) int16 {
 	s := input
 	var f int16 = 0
 	minus := false
@@ -80,23 +81,21 @@ func parseFloat(input []byte) (int16, error) {
 		f += 100 * int16(s[0]-zeroCode)
 	}
 	if minus {
-		return -f, nil
+		return -f
 	}
 
-	return f, nil
+	return f
 }
 
 type worker struct {
 	allCities [][]*Measurement
 	indexes   []uint64
-	crc       hash.Hash64
+	//crc       hash.Hash64
 }
 
 func newWorker() *worker {
 	return &worker{
-
 		allCities: make([][]*Measurement, mSize),
-		crc:       xxhash.New(),
 	}
 }
 
@@ -117,11 +116,7 @@ func (w *worker) process(buffer []byte, wg *sync.WaitGroup) {
 		case CR:
 		case LF:
 			tempEnd = i
-			err := w.addCity(buffer, cityStart, cityEnd, tempStart, tempEnd)
-			if err != nil {
-				// it's OK to panic here
-				panic(err)
-			}
+			w.addCity(buffer, cityStart, cityEnd, tempStart, tempEnd)
 			cityStart = i + 1
 		case semicolon:
 			cityEnd = i
@@ -130,29 +125,23 @@ func (w *worker) process(buffer []byte, wg *sync.WaitGroup) {
 	}
 
 	// we have last unprocessed city
-	err := w.addCity(buffer, cityStart, cityEnd, tempStart, bufLen)
-	if err != nil {
-		panic(err)
-	}
+	w.addCity(buffer, cityStart, cityEnd, tempStart, bufLen)
 
 	wg.Done()
 }
 
-func (w *worker) addCity(buffer []byte, cityStart, cityEnd, tempStart, tempEnd int) error {
+func (w *worker) addCity(buffer []byte, cityStart, cityEnd, tempStart, tempEnd int) {
 	city := buffer[cityStart:cityEnd]
-	_, err := w.crc.Write(city)
-	if err != nil {
-		return err
-	}
-	val, err := parseFloat(buffer[tempStart:tempEnd])
-	if err != nil {
-		return err
+
+	val := parseFloat(buffer[tempStart:tempEnd])
+
+	crcVal := fnvOffsetBasis
+	for i := 0; i < len(city); i++ {
+		crcVal ^= uint64(city[i])
+		crcVal *= fnvPrime
 	}
 
-	crcVal := w.crc.Sum64()
 	cityIndex := crcVal % mSize
-	w.crc.Reset()
-
 	mr := w.allCities[cityIndex]
 	var cityMr *Measurement
 	if len(mr) == 0 {
@@ -193,8 +182,6 @@ func (w *worker) addCity(buffer []byte, cityStart, cityEnd, tempStart, tempEnd i
 	}
 
 	cityMr.add(val)
-
-	return nil
 }
 
 type mergeRequest struct {
