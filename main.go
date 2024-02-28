@@ -143,45 +143,38 @@ func (w *worker) addCity(buffer []byte, cityStart, cityEnd, tempStart, tempEnd i
 
 	cityIndex := crcVal % mSize
 	mr := w.allCities[cityIndex]
-	var cityMr *Measurement
 	if len(mr) == 0 {
 		mr = make([]*Measurement, 2)
-		cityMr = &Measurement{
+		cityMr := &Measurement{
 			Name:  string(city),
-			Min:   99,
-			Max:   -99,
+			Min:   val,
+			Max:   val,
 			Hash:  crcVal,
-			sum:   0,
-			count: 0,
+			sum:   int32(val),
+			count: 1,
 		}
 		w.indexes = append(w.indexes, cityIndex)
 		mr[0] = cityMr
 		w.allCities[cityIndex] = mr
 	} else {
 		if mr[0].Hash == crcVal {
-			cityMr = mr[0]
+			mr[0].add(val)
 		} else {
-			cityMr = mr[1]
+			cityMr := mr[1]
 			if cityMr == nil {
 				cityMr = &Measurement{
 					Name:  string(city),
-					Min:   99,
-					Max:   -99,
+					Min:   val,
+					Max:   val,
 					Hash:  crcVal,
-					sum:   0,
-					count: 0,
+					sum:   int32(val),
+					count: 1,
 				}
 
 				mr[1] = cityMr
 			}
 		}
 	}
-
-	if cityMr == nil {
-		panic(fmt.Errorf("%+v", mr))
-	}
-
-	cityMr.add(val)
 }
 
 type mergeRequest struct {
